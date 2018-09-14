@@ -1,0 +1,28 @@
+group 'com.pzaytsev'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'scala'
+apply plugin: 'application'
+apply plugin: 'docker'
+
+buildscript {
+    repositories { jcenter() }
+    dependencies {
+        classpath 'se.transmode.gradle:gradle-docker:1.2'
+    }
+}
+
+mainClassName = "com.pzaytsev.Main"
+
+
+repositories{
+    jcenter()
+}
+
+dependencies{
+    compile 'org.scala-lang:scala-library:2.12.6'
+    compile 'com.github.finagle:finch-core_2.12:0.23.0'
+    compile 'org.scalaz:scalaz-zio_2.12:0.2.7'
+    compile group: 'commons-io', name: 'commons-io', version: '2.6'
+}
+
