@@ -19,7 +19,26 @@ repositories{
     jcenter()
 }
 
+configurations {
+    scalaCompilerPlugin
+    kindProjectorPlugin
+}
+
 dependencies{
+    scalaCompilerPlugin "org.scalamacros:paradise_2.12.6:2.1.1"
+    kindProjectorPlugin "org.spire-math:kind-projector_2.12:0.9.7"
+
+}
+
+tasks.withType(ScalaCompile){
+    scalaCompileOptions.additionalParameters = [
+            "-Xplugin:" + configurations.scalaCompilerPlugin.asPath
+            + "-Xplugin:" + configurations.kindProjectorPlugin.asPath
+    ]
+}
+
+dependencies{
+    compile "org.scalaz:scalaz-core_2.12:7.2.26"
     compile 'org.scala-lang:scala-library:2.12.6'
     compile 'com.github.finagle:finch-core_2.12:0.23.0'
     compile 'org.scalaz:scalaz-zio_2.12:0.2.7'
