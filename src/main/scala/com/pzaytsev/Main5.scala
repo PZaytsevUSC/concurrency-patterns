@@ -4,13 +4,21 @@ import Scalaz._
 import com.pzaytsev.Everything._
 import scalaz.zio.{IO, Queue}
 
+/**
+  *
+  * Master - worker pattern via ZIO.
+  * Similar to routing in akka.
+  * Master receives a natural number to factor via async channel. Delegates work to one of the 5 workers via their channels.
+  * Master receives a response in the background, aggregates the results.
+  * Communication channels are typed and state is handled in a functional way.
+  *
+  */
 object Everything {
 
   case class MasterState(inProcess: Set[Int],
                          processedNums: Map[Int, List[Int]],
                          workerToChannel: Map[Int, Queue[Int]],
-                         incomingChannel: Queue[Int],
-                         backRefQueue: Queue[Factors])
+                         incomingChannel: Queue[MasterMessage])
 
   sealed trait MasterMessage
   case class ComputeFactors(naturalNumber: Int) extends MasterMessage
@@ -18,7 +26,7 @@ object Everything {
 
 }
 
-class Master() {
+class Master {
 
   def handle(msg: MasterMessage, state: MasterState): IO[Nothing, MasterState] =
     msg match {
@@ -39,7 +47,7 @@ class Master() {
     }
 
   def delegateWork(state: MasterState): IO[Nothing, MasterState] = {
-    // don't process anything is 5 concurrent factorizations are empty
+    // don't process anything if 5 concurrent factorizations or when empty
     if (state.inProcess.size == 5 || state.inProcess.isEmpty) {
       IO.now(state)
     }
@@ -66,7 +74,7 @@ class Master() {
       case None =>
         for {
           q <- Queue.bounded[Int](3)
-          _ <- new Worker().run(q, state.backRefQueue)
+          _ <- new Worker().run(q, state.incomingChannel)
 
         } yield
           (state.copy(
@@ -76,10 +84,10 @@ class Master() {
   }
 
   def run(state: MasterState,
-          q: Queue[Int]): IO[Nothing, Map[Int, List[Int]]] = {
+          q: Queue[MasterMessage]): IO[Nothing, Map[Int, List[Int]]] = {
     for {
-      msg <- q.take // should return newState with empty processes to terminate
-      newState <- handle(ComputeFactors(msg), state)
+      msg <- q.take // should return newState with empty inProcesses to terminate
+      newState <- handle(msg, state)
       e <- if (newState.inProcess.isEmpty) {
         IO.now(newState.processedNums)
       } else {
@@ -129,7 +137,8 @@ class Worker {
     } yield (number, computePrimeFactors(number))
   }
 
-  def mainProcess(q: Queue[Int], backRef: Queue[Factors]): IO[Nothing, Unit] = {
+  def mainProcess(q: Queue[Int],
+                  backRef: Queue[MasterMessage]): IO[Nothing, Unit] = {
     for {
       processFork <- processQMessage(q).fork
       (num, factors) <- processFork.join
@@ -140,7 +149,7 @@ class Worker {
     } yield ()
   }
 
-  def run(q: Queue[Int], backRef: Queue[Factors]) =
+  def run(q: Queue[Int], backRef: Queue[MasterMessage]): IO[Nothing, Nothing] =
     mainProcess(q, backRef).forever
 
 }
