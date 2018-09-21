@@ -6,8 +6,7 @@ import scalaz.zio.{IO, Queue}
 
 object Everything {
 
-  case class MasterState(totalNumbers: Int,
-                         inProcess: Set[Int],
+  case class MasterState(inProcess: Set[Int],
                          processedNums: Map[Int, List[Int]],
                          workerToChannel: Map[Int, Queue[Int]],
                          incomingChannel: Queue[Int],
@@ -23,25 +22,39 @@ class Master() {
 
   def handle(msg: MasterMessage, state: MasterState): IO[Nothing, MasterState] =
     msg match {
-      case ComputeFactors(naturalNumber) => delegateWork(state, naturalNumber)
-//      case Factors(factors, num) =>
-//        val hash = num % 5
-//        val updatedState = state.copy(
-//          inProcess = state.inProcess - hash,
-//          processedNums = state.processedNums + (num -> factors))
+      case ComputeFactors(naturalNumber) =>
+        val newState = state.copy(inProcess = state.inProcess + naturalNumber)
+        delegateWork(state)
+      case Factors(factors, num) =>
+        val hash = num % 5
+        val updatedState = state.copy(
+          inProcess = state.inProcess - hash,
+          processedNums = state.processedNums + (num -> factors))
+        if (updatedState.inProcess.isEmpty) {
+          IO.now(updatedState)
+        } else {
+          delegateWork(state)
+        }
 
     }
 
-  def delegateWork(state: MasterState,
-                   naturalNumber: Int): IO[Nothing, MasterState] = {
+  def delegateWork(state: MasterState): IO[Nothing, MasterState] = {
+    // don't process anything is 5 concurrent factorizations are empty
+    if (state.inProcess.size == 5 || state.inProcess.isEmpty) {
+      IO.now(state)
+    }
 
-    if (state.inProcess.size == 5) { IO.now(state) } else
-      for {
-        (masterState, workerQueue) <- provideChannelForWorker(state,
-                                                              naturalNumber)
-        _ <- workerQueue.offer(naturalNumber)
-      } yield
-        masterState.copy(inProcess = masterState.inProcess + naturalNumber % 5)
+    val nextNaturalNumber = state.inProcess.head
+
+    val newState = state.copy(inProcess = state.inProcess - nextNaturalNumber)
+
+    for {
+      (masterState, workerQueue) <- provideChannelForWorker(newState,
+                                                            nextNaturalNumber)
+      _ <- workerQueue.offer(nextNaturalNumber)
+    } yield
+      masterState.copy(
+        inProcess = masterState.inProcess + nextNaturalNumber % 5)
   }
 
   def provideChannelForWorker(
@@ -65,7 +78,7 @@ class Master() {
   def run(state: MasterState,
           q: Queue[Int]): IO[Nothing, Map[Int, List[Int]]] = {
     for {
-      msg <- q.take
+      msg <- q.take // should return newState with empty processes to terminate
       newState <- handle(ComputeFactors(msg), state)
       e <- if (newState.inProcess.isEmpty) {
         IO.now(newState.processedNums)
