@@ -5,6 +5,8 @@ import java.io.IOException
 import scalaz.zio.{IO, RTS, Ref, Schedule}
 import scalaz.zio.console._
 import scala.concurrent.duration._
+import scalaz._
+import Scalaz._
 
 /**
   *
@@ -68,5 +70,6 @@ object Main4 extends RTS {
     } yield ()
 
     unsafeRun(program)
+
   }
 }

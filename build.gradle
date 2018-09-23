@@ -25,15 +25,15 @@ configurations {
 }
 
 dependencies{
-    scalaCompilerPlugin "org.scalamacros:paradise_2.12.6:2.1.1"
+    compile 'org.scala-lang:scala-library:2.12.6'
     kindProjectorPlugin "org.spire-math:kind-projector_2.12:0.9.7"
 
 }
 
 tasks.withType(ScalaCompile){
     scalaCompileOptions.additionalParameters = [
-            "-Xplugin:" + configurations.scalaCompilerPlugin.asPath
-            + "-Xplugin:" + configurations.kindProjectorPlugin.asPath
+
+            "-Xplugin:" + configurations.kindProjectorPlugin.asPath
     ]
 }
 

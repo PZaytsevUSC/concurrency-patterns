@@ -1,8 +1,12 @@
 package com.pzaytsev
+import java.io.IOException
+
 import scalaz._
 import Scalaz._
 import com.pzaytsev.Everything._
-import scalaz.zio.{IO, Queue}
+import scalaz.zio.{IO, Queue, RTS}
+import scalaz.zio.console._
+import LocalMonads._
 
 /**
   *
@@ -15,10 +19,10 @@ import scalaz.zio.{IO, Queue}
   */
 object Everything {
 
-  case class MasterState(inProcess: Set[Int],
+  case class MasterState(toProcess: Set[Int],
+                         inProcess: Set[Int],
                          processedNums: Map[Int, List[Int]],
-                         workerToChannel: Map[Int, Queue[Int]],
-                         incomingChannel: Queue[MasterMessage])
+                         workerToChannel: Map[Int, Queue[Int]])
 
   sealed trait MasterMessage
   case class ComputeFactors(naturalNumber: Int) extends MasterMessage
@@ -28,53 +32,61 @@ object Everything {
 
 class Master {
 
-  def handle(msg: MasterMessage, state: MasterState): IO[Nothing, MasterState] =
+  def combineStates(state: MasterState, num2: Int)(
+      implicit q: Queue[MasterMessage]): IO[Nothing, MasterState] = {
+    val newState = state.copy(toProcess = state.toProcess + num2)
+    delegateWork(newState, q)
+  }
+  def handle(msg: MasterMessage,
+             state: MasterState,
+             q: Queue[MasterMessage]): IO[Nothing, MasterState] =
     msg match {
-      case ComputeFactors(naturalNumber) =>
-        val newState = state.copy(inProcess = state.inProcess + naturalNumber)
-        delegateWork(state)
+
+      // creates work
+      case ComputeFactors(num) =>
+        delegateWork(state.copy(toProcess = state.toProcess + num), q)
+      // processes work
       case Factors(factors, num) =>
-        val hash = num % 5
         val updatedState = state.copy(
-          inProcess = state.inProcess - hash,
+          inProcess = state.inProcess - num,
           processedNums = state.processedNums + (num -> factors))
-        if (updatedState.inProcess.isEmpty) {
-          IO.now(updatedState)
-        } else {
-          delegateWork(state)
-        }
+        delegateWork(updatedState, q)
 
     }
 
-  def delegateWork(state: MasterState): IO[Nothing, MasterState] = {
-    // don't process anything if 5 concurrent factorizations or when empty
-    if (state.inProcess.size == 5 || state.inProcess.isEmpty) {
-      IO.now(state)
+  def delegateWork(state: MasterState,
+                   q: Queue[MasterMessage]): IO[Nothing, MasterState] = {
+
+    if (state.toProcess.isEmpty) {
+
+      return IO.now(state)
     }
 
-    val nextNaturalNumber = state.inProcess.head
-
-    val newState = state.copy(inProcess = state.inProcess - nextNaturalNumber)
+    val nextNaturalNumber = state.toProcess.head
+    val newState = state.copy(toProcess = state.toProcess - nextNaturalNumber)
 
     for {
-      (masterState, workerQueue) <- provideChannelForWorker(newState,
-                                                            nextNaturalNumber)
+
+      stateAndQueue <- provideChannelForWorker(newState, nextNaturalNumber, q)
+      state2 = stateAndQueue._1
+      workerQueue = stateAndQueue._2
+
       _ <- workerQueue.offer(nextNaturalNumber)
-    } yield
-      masterState.copy(
-        inProcess = masterState.inProcess + nextNaturalNumber % 5)
+    } yield state2.copy(inProcess = state2.inProcess + nextNaturalNumber)
   }
 
-  def provideChannelForWorker(
-      state: MasterState,
-      num: Int): IO[Nothing, (MasterState, Queue[Int])] = {
+  def provideChannelForWorker(state: MasterState,
+                              num: Int,
+                              incoming: Queue[MasterMessage])
+    : IO[Nothing, (MasterState, Queue[Int])] = {
     val toSendHash: Int = num % 5
+
     state.workerToChannel.get(toSendHash) match {
       case Some(queue) => IO.now((state, queue))
       case None =>
         for {
           q <- Queue.bounded[Int](3)
-          _ <- new Worker().run(q, state.incomingChannel)
+          _ <- new Worker().run(q, incoming).fork
 
         } yield
           (state.copy(
@@ -84,13 +96,17 @@ class Master {
   }
 
   def run(state: MasterState,
-          q: Queue[MasterMessage]): IO[Nothing, Map[Int, List[Int]]] = {
+          q: Queue[MasterMessage]): IO[IOException, Map[Int, List[Int]]] = {
+
     for {
-      msg <- q.take // should return newState with empty inProcesses to terminate
-      newState <- handle(msg, state)
-      e <- if (newState.inProcess.isEmpty) {
+
+      msg <- q.take
+      newState <- handle(msg, state, q)
+      e <- if (newState.toProcess.isEmpty && newState.inProcess.isEmpty) {
+
         IO.now(newState.processedNums)
       } else {
+
         run(newState, q)
       }
 
@@ -104,34 +120,37 @@ class Worker {
 
     def divisible(i: Int, num: Int, factors: List[Int]): List[Int] = {
       if (num % i == 0) {
+
         divisible(i, num / i, factors :+ i)
       } else {
         factors
       }
     }
 
-    def factorRecEven(num: Int, factors: List[Int]): List[Int] = {
-      if (num % 2 == 0) factorRecEven(num / 2, factors :+ (num / 2))
-      else factors
+    def factorRecEven(num: Int, factors: List[Int]): (Int, List[Int]) = {
+      if (num % 2 == 0) factorRecEven(num / 2, factors :+ 2)
+      else (num, factors)
     }
 
     def factorRecOdd(acc: Int,
                      num: Int,
                      target: Int,
                      factors: List[Int]): List[Int] = {
-      if (acc <= target)
+      if (acc <= target) {
         factorRecOdd(acc + 2, num, target, divisible(acc, num, factors))
-      else factors
+      } else {
+        if (num > 2) num :: factors else factors
+      }
 
     }
 
-    factorRecOdd(3,
-                 num,
-                 Math.sqrt(num).toInt,
-                 factorRecEven(num, List.empty[Int]))
+    val (newNum, list) = factorRecEven(num, List.empty[Int])
+
+    factorRecOdd(3, newNum, Math.sqrt(num).toInt, list)
   }
 
   def processQMessage(q: Queue[Int]): IO[Nothing, (Int, List[Int])] = {
+
     for {
       number <- q.take
     } yield (number, computePrimeFactors(number))
@@ -141,18 +160,42 @@ class Worker {
                   backRef: Queue[MasterMessage]): IO[Nothing, Unit] = {
     for {
       processFork <- processQMessage(q).fork
-      (num, factors) <- processFork.join
+      numAndFactors <- processFork.join
       _ <- backRef
-        .offer(Factors(factors, num))
+        .offer(Factors(numAndFactors._2, numAndFactors._1))
         .fork
         .void // background reply to parent process
     } yield ()
   }
 
-  def run(q: Queue[Int], backRef: Queue[MasterMessage]): IO[Nothing, Nothing] =
+  def run(q: Queue[Int],
+          backRef: Queue[MasterMessage]): IO[Nothing, Nothing] = {
+
     mainProcess(q, backRef).forever
+  }
 
 }
-object Main5 {
-  def main(args: Array[String]): Unit = {}
+object Main5 extends RTS {
+  def main(args: Array[String]): Unit = {
+
+    val program = for {
+      channel <- Queue.bounded[MasterMessage](3)
+      worker = new Master()
+      masterState = MasterState(Set.empty[Int],
+                                Set.empty[Int],
+                                Map.empty[Int, List[Int]],
+                                Map.empty[Int, Queue[Int]])
+
+      _ <- channel.offer(ComputeFactors(315))
+      _ <- channel.offer(ComputeFactors(780))
+      _ <- channel.offer(ComputeFactors(254))
+
+      mapOfFactors <- worker.run(masterState, channel)
+      _ <- putStrLn(mapOfFactors.toString())
+    } yield ()
+
+    val e = IO.supervise(program)
+    unsafeRun(e)
+  }
+
 }
