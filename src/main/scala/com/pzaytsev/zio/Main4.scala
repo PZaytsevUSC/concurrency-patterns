@@ -1,12 +1,11 @@
-package com.pzaytsev
+package com.pzaytsev.zio
 
 import java.io.IOException
 
-import scalaz.zio.{IO, RTS, Ref, Schedule}
 import scalaz.zio.console._
+import scalaz.zio.{IO, RTS, Ref}
+
 import scala.concurrent.duration._
-import scalaz._
-import Scalaz._
 
 /**
   *

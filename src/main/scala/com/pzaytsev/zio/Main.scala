@@ -1,4 +1,4 @@
-package com.pzaytsev
+package com.pzaytsev.zio
 
 import java.io.File
 
@@ -7,12 +7,10 @@ import org.apache.commons.io.monitor.{
   FileAlterationMonitor,
   FileAlterationObserver
 }
+import scalaz.zio.console._
+import scalaz.zio.{Callback, ExitResult, IO, RTS}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scalaz.zio
-import scalaz.zio.{Callback, ExitResult, IO, RTS}
-import scalaz.zio.console._
-
 import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success}
 

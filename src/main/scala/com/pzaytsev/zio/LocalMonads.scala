@@ -1,4 +1,5 @@
-package com.pzaytsev
+package com.pzaytsev.zio
+
 import scalaz._
 import scalaz.zio._
 

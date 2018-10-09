@@ -1,7 +1,7 @@
-package com.pzaytsev
+package com.pzaytsev.zio
 
-import scalaz.zio.{IO, Queue, RTS}
 import scalaz.zio.console._
+import scalaz.zio.{IO, Queue, RTS}
 
 /**
   * This snippet demonstrates communication of systems via async channels. (Kinda like Akka actors)

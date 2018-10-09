@@ -1,4 +1,4 @@
-package com.pzaytsev
+package com.pzaytsev.zio
 
 import scalaz.zio._
 import scalaz.zio.console._

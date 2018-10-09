@@ -1,12 +1,10 @@
-package com.pzaytsev
+package com.pzaytsev.zio
+
 import java.io.IOException
 
-import scalaz._
-import Scalaz._
-import com.pzaytsev.Everything._
-import scalaz.zio.{IO, Queue, RTS}
+import com.pzaytsev.zio.Everything._
 import scalaz.zio.console._
-import LocalMonads._
+import scalaz.zio.{IO, Queue, RTS}
 
 /**
   *

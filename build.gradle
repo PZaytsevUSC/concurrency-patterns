@@ -39,9 +39,11 @@ tasks.withType(ScalaCompile){
 
 dependencies{
     compile "org.scalaz:scalaz-core_2.12:7.2.26"
+    compile "io.monix:monix_2.12:3.0.0-RC1"
     compile 'org.scala-lang:scala-library:2.12.6'
     compile 'com.github.finagle:finch-core_2.12:0.23.0'
     compile 'org.scalaz:scalaz-zio_2.12:0.2.7'
+    compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5.6'
     compile group: 'commons-io', name: 'commons-io', version: '2.6'
 
 }
