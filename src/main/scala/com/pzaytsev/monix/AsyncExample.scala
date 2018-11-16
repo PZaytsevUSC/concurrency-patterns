@@ -22,6 +22,13 @@ import scala.util.Try
 import scala.concurrent.duration._
 import scala.io.Source
 
+/**
+  * An asynchronous task represents logic
+  * that executes independent of the main program flow,
+  * or current callstack. It can be a task whose result
+  * gets computed on another thread, or on some other machine on the network.
+  * (A => Unit) => Unit or Observer Pattern
+  */
 object AsyncExample extends App {
 
   def perfromOldschoolHttpCall(
